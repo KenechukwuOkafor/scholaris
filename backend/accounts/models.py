@@ -1,7 +1,10 @@
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import models
 
-from core.models import SchoolScopedModel
+from core.models import School, SchoolScopedModel, TimestampedModel
+
+User = get_user_model()
 
 
 class Teacher(SchoolScopedModel):
@@ -60,3 +63,37 @@ class Teacher(SchoolScopedModel):
     def save(self, *args, **kwargs) -> None:
         self.full_clean()
         super().save(*args, **kwargs)
+
+
+class UserProfile(TimestampedModel):
+    """
+    Links a Django User to exactly one School tenant.
+
+    This is the authoritative source for request.user.school.
+    Every user who accesses school data must have a profile; views
+    use get_request_school() to enforce this.
+
+    A superuser (is_staff=True) may operate without a profile — views
+    fall back to payload-derived school in that case so admin tooling
+    continues to work.
+    """
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="profile",
+    )
+    school = models.ForeignKey(
+        School,
+        on_delete=models.PROTECT,
+        related_name="user_profiles",
+    )
+
+    class Meta:
+        db_table = "accounts_userprofile"
+        indexes = [
+            models.Index(fields=["school"], name="idx_userprofile_school"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user.username} @ {self.school.name}"

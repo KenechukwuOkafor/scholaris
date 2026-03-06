@@ -4,6 +4,8 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
+from core.managers import SchoolManager
+
 
 class TimestampedModel(models.Model):
     """
@@ -89,6 +91,8 @@ class SchoolScopedModel(TimestampedModel):
         related_name="%(app_label)s_%(class)s_set",
         db_index=True,
     )
+
+    objects = SchoolManager()
 
     class Meta:
         abstract = True

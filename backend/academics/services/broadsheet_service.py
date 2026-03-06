@@ -48,7 +48,9 @@ class BroadsheetService:
         school_class = self._get_school_class(class_id=class_id, school=school)
         subject = self._get_subject(subject_id=subject_id, school=school)
         term = self._get_term(term_id=term_id, school=school)
-        assessment_type = self._get_assessment_type(assessment_type_id=assessment_type_id)
+        assessment_type = self._get_assessment_type(
+            assessment_type_id=assessment_type_id, school=school
+        )
 
         self._check_teaching_assignment(
             teacher=teacher,
@@ -122,11 +124,15 @@ class BroadsheetService:
         except Term.DoesNotExist:
             raise NotFound(f"Term {term_id} not found for this school.")
 
-    def _get_assessment_type(self, *, assessment_type_id: uuid.UUID) -> AssessmentType:
+    def _get_assessment_type(
+        self, *, assessment_type_id: uuid.UUID, school
+    ) -> AssessmentType:
         try:
-            return AssessmentType.objects.get(id=assessment_type_id)
+            return AssessmentType.objects.get(id=assessment_type_id, school=school)
         except AssessmentType.DoesNotExist:
-            raise NotFound(f"AssessmentType {assessment_type_id} not found.")
+            raise NotFound(
+                f"AssessmentType {assessment_type_id} not found for this school."
+            )
 
     def _check_teaching_assignment(
         self,

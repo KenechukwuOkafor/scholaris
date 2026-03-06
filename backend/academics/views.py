@@ -1,8 +1,12 @@
 from django.db import transaction
+from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from core.models import SchoolClass
+from core.tenant import get_request_school
 
 from .serializers import BroadsheetSubmitSerializer
 from .services.broadsheet_service import BroadsheetService
@@ -17,8 +21,14 @@ class BroadsheetSubmitView(APIView):
     The authenticated teacher must have a TeachingAssignment for the
     specified class + subject combination at their school.
 
-    The school is derived from the submitted class_id, so no school_id
-    field is required in the payload.
+    Tenant isolation is enforced in two layers:
+      1. get_request_school() binds the request to the user's school
+         (raises PermissionDenied for non-staff users without a UserProfile).
+      2. The school derived from class_id is cross-checked against the
+         user's school; mismatches are rejected.
+
+    Staff users (is_staff=True) without a UserProfile may operate across
+    schools — intended for admin tooling only.
     """
 
     permission_classes = [IsAuthenticated]
@@ -28,12 +38,12 @@ class BroadsheetSubmitView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        # Resolve school from the class.  This is done inside the service
-        # to keep the view thin, but we need the school object here to
-        # pass into the transaction boundary.
-        from core.models import SchoolClass
-        from rest_framework.exceptions import NotFound
+        # --- Tenant resolution ---------------------------------------------
+        # user_school is the school bound to this user's profile, or None
+        # for staff without a profile (admin fallback).
+        user_school = get_request_school(request)
 
+        # Derive school from the submitted class_id.
         try:
             school_class = SchoolClass.objects.select_related("school").get(
                 id=data["class_id"]
@@ -43,6 +53,14 @@ class BroadsheetSubmitView(APIView):
 
         school = school_class.school
 
+        # Cross-check: if the user has a profile, the class must belong to
+        # their school — prevents submitting scores into another tenant.
+        if user_school is not None and user_school != school:
+            raise PermissionDenied(
+                "The requested class does not belong to your school."
+            )
+
+        # --- Business logic ------------------------------------------------
         with transaction.atomic():
             result = BroadsheetService().submit_scores(
                 user=request.user,

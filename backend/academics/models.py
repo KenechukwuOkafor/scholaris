@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 
 from accounts.models import Teacher
+from core.managers import SchoolManager
 from core.models import School, SchoolClass, SchoolScopedModel, Subject, Term, TimestampedModel
 from enrollment.models import Student
 
@@ -49,6 +50,8 @@ class AssessmentType(TimestampedModel):
         db_index=True,
         help_text="Display order — lower numbers appear first.",
     )
+
+    objects = SchoolManager()
 
     class Meta:
         db_table = "academics_assessmenttype"
@@ -533,3 +536,74 @@ class ResultSummary(SchoolScopedModel):
 
     def __str__(self) -> str:
         return f"{self.student} — {self.term} (avg: {self.average_score})"
+
+
+class StudentSubjectResult(SchoolScopedModel):
+    """
+    Computed per-student per-subject result for a term.
+
+    One row per (school, student, subject, term).  Values are written by
+    ResultProcessor and must be treated as a read cache — do not edit directly.
+
+    Inherits from SchoolScopedModel:
+    - id         → UUIDField primary key
+    - school     → ForeignKey(School, on_delete=PROTECT)
+    - created_at → DateTimeField
+    - updated_at → DateTimeField
+    """
+
+    student = models.ForeignKey(
+        Student,
+        on_delete=models.PROTECT,
+        related_name="subject_results",
+    )
+    school_class = models.ForeignKey(
+        SchoolClass,
+        on_delete=models.PROTECT,
+        related_name="subject_results",
+    )
+    subject = models.ForeignKey(
+        Subject,
+        on_delete=models.PROTECT,
+        related_name="subject_results",
+    )
+    term = models.ForeignKey(
+        Term,
+        on_delete=models.PROTECT,
+        related_name="subject_results",
+    )
+    total_score = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        help_text="Sum of all assessment scores for this student in this subject.",
+    )
+    subject_position = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Rank within the class for this subject. NULL when ranking is disabled.",
+    )
+
+    class Meta:
+        db_table = "academics_studentsubjectresult"
+        verbose_name = "Student Subject Result"
+        verbose_name_plural = "Student Subject Results"
+        ordering = ["term", "subject__name", "subject_position"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["school", "student", "subject", "term"],
+                name="uniq_student_subject_result",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["school", "school_class", "term"],
+                name="idx_subjresult_cls_term",
+            ),
+            models.Index(
+                fields=["school", "student", "term"],
+                name="idx_subjresult_student_term",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.student} — {self.subject} (pos: {self.subject_position})"
