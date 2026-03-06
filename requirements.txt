@@ -1,0 +1,12 @@
+Django>=5.0
+djangorestframework
+psycopg2-binary
+django-cors-headers
+djangorestframework-simplejwt
+celery
+redis
+django-storages
+boto3
+python-dotenv
+python-json-logger
+django-extensions
