@@ -16,7 +16,7 @@ import uuid
 from decimal import Decimal
 from typing import Any
 
-from django.db import models as django_models
+from django.db import models as django_models, transaction
 from django.utils import timezone
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 
@@ -81,6 +81,111 @@ class BroadsheetService:
         )
 
         return {"students_updated": count}
+
+    def save_broadsheet_scores(
+        self,
+        *,
+        school,
+        school_class: SchoolClass,
+        subject: Subject,
+        term: Term,
+        assessment_type: AssessmentType,
+        scores: list[dict[str, Any]],
+    ) -> dict[str, int]:
+        """
+        Save scores for an entire class with explicit create/update tracking,
+        then trigger result computation.
+
+        Each entry in ``scores`` must be::
+
+            {"student_id": <uuid>, "score": <Decimal>}
+
+        All writes and the result computation run inside a single atomic
+        transaction so the database is never left in a partially-updated state.
+
+        Returns::
+
+            {"created": <int>, "updated": <int>}
+        """
+        # Guard: catch programmer errors where mismatched objects are passed in.
+        assert school_class.school_id == school.id, (
+            f"school_class {school_class.id} belongs to school {school_class.school_id}, "
+            f"not {school.id}"
+        )
+        assert subject.school_id == school.id, (
+            f"subject {subject.id} belongs to school {subject.school_id}, "
+            f"not {school.id}"
+        )
+        assert assessment_type.school_id == school.id, (
+            f"assessment_type {assessment_type.id} belongs to school "
+            f"{assessment_type.school_id}, not {school.id}"
+        )
+
+        # Normalise: accept both "student_id" and "student" as the key.
+        normalised = [
+            {
+                "student_id": e.get("student_id") or e["student"],
+                "score": Decimal(str(e["score"])),
+            }
+            for e in scores
+        ]
+
+        submitted: dict[uuid.UUID, Decimal] = {
+            e["student_id"]: e["score"] for e in normalised
+        }
+        student_ids = set(submitted)
+
+        # --- Validation (no DB writes yet) ---------------------------------
+        student_map = self._validate_students(
+            student_ids=student_ids,
+            school_class=school_class,
+            school=school,
+        )
+        self._validate_score_values(
+            score_entries=normalised,
+            assessment_type=assessment_type,
+        )
+
+        # --- Persist + compute inside one transaction ----------------------
+        with transaction.atomic():
+            existing_map = self._fetch_existing_scores(
+                school=school,
+                student_ids=student_ids,
+                subject=subject,
+                term=term,
+                assessment_type=assessment_type,
+            )
+
+            scores_to_create, scores_to_update = self._split_create_update(
+                submitted=submitted,
+                existing_map=existing_map,
+                student_map=student_map,
+                school=school,
+                subject=subject,
+                term=term,
+                assessment_type=assessment_type,
+            )
+
+            if scores_to_create:
+                Score.objects.bulk_create(scores_to_create)
+
+            if scores_to_update:
+                Score.objects.bulk_update(
+                    scores_to_update,
+                    fields=["score", "updated_at"],
+                )
+
+            # Trigger result computation after scores are persisted.
+            from academics.services.result_processor import ResultProcessor
+            ResultProcessor().process_results(
+                school_class=school_class,
+                term=term,
+            )
+
+        return {
+            "created": len(scores_to_create),
+            "updated": len(scores_to_update),
+        }
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -251,3 +356,78 @@ class BroadsheetService:
         )
 
         return len(score_objects)
+
+    def _fetch_existing_scores(
+        self,
+        *,
+        school,
+        student_ids: set[uuid.UUID],
+        subject: Subject,
+        term: Term,
+        assessment_type: AssessmentType,
+    ) -> dict[uuid.UUID, Score]:
+        """
+        Return a {student_id: Score} map for rows that already exist.
+
+        Uses SELECT FOR UPDATE so concurrent requests cannot interleave
+        their reads and writes on the same rows.
+
+        Single query — no N+1.
+        """
+        return {
+            row.student_id: row
+            for row in Score.objects.select_for_update().filter(
+                school=school,
+                student_id__in=student_ids,
+                subject=subject,
+                term=term,
+                assessment_type=assessment_type,
+            )
+        }
+
+    def _split_create_update(
+        self,
+        *,
+        submitted: dict[uuid.UUID, Decimal],
+        existing_map: dict[uuid.UUID, Score],
+        student_map: dict[uuid.UUID, Student],
+        school,
+        subject: Subject,
+        term: Term,
+        assessment_type: AssessmentType,
+    ) -> tuple[list[Score], list[Score]]:
+        """
+        Partition submitted scores into two lists:
+
+        - ``scores_to_create``: student has no existing row → new Score objects.
+        - ``scores_to_update``: student already has a row → mutate in place.
+
+        Returns (scores_to_create, scores_to_update).
+        """
+        now = timezone.now()
+        scores_to_create: list[Score] = []
+        scores_to_update: list[Score] = []
+
+        for student_id, score_value in submitted.items():
+            if student_id in existing_map:
+                obj = existing_map[student_id]
+                if obj.score != score_value:
+                    obj.score = score_value
+                    obj.updated_at = now
+                    scores_to_update.append(obj)
+            else:
+                scores_to_create.append(
+                    Score(
+                        id=uuid.uuid4(),
+                        school=school,
+                        student=student_map[student_id],
+                        subject=subject,
+                        term=term,
+                        assessment_type=assessment_type,
+                        score=score_value,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+
+        return scores_to_create, scores_to_update
