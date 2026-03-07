@@ -1,6 +1,19 @@
 from django.contrib import admin
 
-from .models import AssessmentType, ResultStatistics, Score, TeachingAssignment
+from django.db import models as db_models
+from django.forms import Textarea
+
+from .models import (
+    AssessmentType,
+    ReportCardTemplate,
+    ResultStatistics,
+    Score,
+    StudentTraitRating,
+    TeachingAssignment,
+    Trait,
+    TraitCategory,
+    TraitScale,
+)
 
 
 @admin.register(AssessmentType)
@@ -66,4 +79,56 @@ class ResultStatisticsAdmin(admin.ModelAdmin):
     )
     list_filter = ("school", "term", "school_class")
     search_fields = ("school_class__name", "subject__name")
+    readonly_fields = ("id", "created_at", "updated_at")
+
+
+@admin.register(ReportCardTemplate)
+class ReportCardTemplateAdmin(admin.ModelAdmin):
+    list_display = ("name", "school", "is_active", "created_at", "updated_at")
+    list_filter = ("school", "is_active")
+    search_fields = ("name", "school__name")
+    ordering = ("school", "name")
+    readonly_fields = ("id", "created_at", "updated_at")
+    formfield_overrides = {
+        db_models.TextField: {"widget": Textarea(attrs={"rows": 30, "cols": 120})},
+    }
+
+
+@admin.register(TraitCategory)
+class TraitCategoryAdmin(admin.ModelAdmin):
+    list_display = ("name", "display_order", "school", "created_at")
+    list_filter = ("school",)
+    search_fields = ("name",)
+    ordering = ("school", "display_order", "name")
+    readonly_fields = ("id", "created_at", "updated_at")
+
+
+@admin.register(Trait)
+class TraitAdmin(admin.ModelAdmin):
+    list_display = ("name", "category", "display_order", "school", "created_at")
+    list_filter = ("school", "category")
+    search_fields = ("name", "category__name")
+    ordering = ("school", "category__display_order", "display_order", "name")
+    readonly_fields = ("id", "created_at", "updated_at")
+
+
+@admin.register(TraitScale)
+class TraitScaleAdmin(admin.ModelAdmin):
+    list_display = ("label", "numeric_value", "display_order", "school", "created_at")
+    list_filter = ("school",)
+    search_fields = ("label",)
+    ordering = ("school", "display_order", "-numeric_value")
+    readonly_fields = ("id", "created_at", "updated_at")
+
+
+@admin.register(StudentTraitRating)
+class StudentTraitRatingAdmin(admin.ModelAdmin):
+    list_display = ("student", "term", "trait", "scale", "school", "created_at")
+    list_filter = ("school", "term", "trait__category")
+    search_fields = (
+        "student__first_name",
+        "student__last_name",
+        "trait__name",
+        "trait__category__name",
+    )
     readonly_fields = ("id", "created_at", "updated_at")

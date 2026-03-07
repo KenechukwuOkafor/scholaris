@@ -45,6 +45,18 @@ class School(TimestampedModel):
     phone = models.CharField(max_length=20, blank=True)
     address = models.TextField(blank=True)
     logo = models.ImageField(upload_to="schools/logos/", null=True, blank=True)
+    principal_signature = models.ImageField(
+        upload_to="schools/signatures/",
+        null=True,
+        blank=True,
+        help_text="Principal's signature image printed at the bottom of report cards.",
+    )
+    school_stamp = models.ImageField(
+        upload_to="schools/stamps/",
+        null=True,
+        blank=True,
+        help_text="Official school stamp image printed at the bottom-right of report cards.",
+    )
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.ACTIVE, db_index=True
     )
@@ -202,6 +214,11 @@ class Term(SchoolScopedModel):
     start_date = models.DateField()
     end_date = models.DateField()
     is_active = models.BooleanField(default=False, db_index=True)
+    next_term_begins = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Date the next term begins, printed on report cards.",
+    )
 
     class Meta:
         db_table = "core_term"

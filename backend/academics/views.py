@@ -1,15 +1,17 @@
 from django.db import transaction
+from django.http import HttpResponse
 from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.models import SchoolClass
+from core.models import SchoolClass, Term
 from core.tenant import get_request_school
 
 from .serializers import BroadsheetSubmitSerializer
 from .services.broadsheet_service import BroadsheetService
+from .services.class_report_pdf_service import generate_class_report_pdf
 
 
 class BroadsheetSubmitView(APIView):
@@ -78,3 +80,55 @@ class BroadsheetSubmitView(APIView):
                 "students_updated": result["students_updated"],
             }
         )
+
+
+class ClassReportCardPDFView(APIView):
+    """
+    GET /api/academics/report-card/class/<uuid:class_id>/<uuid:term_id>/
+
+    Generate and stream a PDF containing one report card per student in the
+    specified class for the given term.
+
+    Tenant isolation is enforced via get_request_school():
+      - Normal users must have a UserProfile; the class must belong to their school.
+      - Staff users without a profile may access any school (admin fallback).
+
+    Students without computed results are silently skipped.
+    Returns 404 if no student in the class has any computed results.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, class_id, term_id) -> HttpResponse:
+        user_school = get_request_school(request)
+
+        # Resolve school_class and verify it exists.
+        try:
+            school_class = SchoolClass.objects.select_related("school").get(id=class_id)
+        except SchoolClass.DoesNotExist:
+            raise NotFound(f"Class {class_id} not found.")
+
+        school = school_class.school
+
+        # Tenant cross-check: non-staff users may only access their own school.
+        if user_school is not None and user_school != school:
+            raise PermissionDenied(
+                "The requested class does not belong to your school."
+            )
+
+        # Resolve term within the same school.
+        try:
+            term = Term.objects.for_school(school).get(id=term_id)
+        except Term.DoesNotExist:
+            raise NotFound(f"Term {term_id} not found for school '{school.name}'.")
+
+        pdf = generate_class_report_pdf(school_class=school_class, term=term)
+
+        filename = (
+            f"report_cards_{school_class.name}_{term.name}.pdf"
+            .replace(" ", "_")
+        )
+
+        response = HttpResponse(pdf, content_type="application/pdf")
+        response["Content-Disposition"] = f'inline; filename="{filename}"'
+        return response

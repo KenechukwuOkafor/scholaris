@@ -607,3 +607,247 @@ class StudentSubjectResult(SchoolScopedModel):
 
     def __str__(self) -> str:
         return f"{self.student} — {self.subject} (pos: {self.subject_position})"
+
+
+# ---------------------------------------------------------------------------
+# Report Card Template
+# ---------------------------------------------------------------------------
+
+
+class ReportCardTemplate(SchoolScopedModel):
+    """
+    A school-specific HTML template for report card PDF generation.
+
+    Each school may define multiple named templates but only one may be
+    active at a time (enforced by a partial unique constraint).  When an
+    active template exists it is used by generate_report_card_pdf() instead
+    of the default filesystem template.
+
+    The html_template field is a full Django template string rendered with
+    a single ``report`` context variable that matches the structure returned
+    by generate_report_card().
+
+    Inherits from SchoolScopedModel:
+    - id         → UUIDField primary key
+    - school     → ForeignKey(School, on_delete=PROTECT)
+    - created_at → DateTimeField
+    - updated_at → DateTimeField
+    """
+
+    name = models.CharField(
+        max_length=150,
+        help_text="Human-readable name for this template, e.g. 'Standard 2025'.",
+    )
+    html_template = models.TextField(
+        help_text=(
+            "Full HTML template string rendered with Django's template engine. "
+            "Use {{ report }} and its nested keys as context variables."
+        ),
+    )
+    is_active = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="Only one template per school may be active at a time.",
+    )
+
+    class Meta:
+        db_table = "academics_reportcardtemplate"
+        ordering = ["school", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["school", "name"],
+                name="uniq_reportcardtemplate_name_per_school",
+            ),
+            # Guarantees at most one active template per school at the DB level.
+            models.UniqueConstraint(
+                fields=["school"],
+                condition=models.Q(is_active=True),
+                name="uniq_active_reportcardtemplate_per_school",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["school", "is_active"],
+                name="idx_rct_school_active",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        status = "active" if self.is_active else "inactive"
+        return f"{self.name} ({status})"
+
+    def save(self, *args, **kwargs) -> None:
+        if self.is_active:
+            ReportCardTemplate.objects\
+                .for_school(self.school)\
+                .exclude(pk=self.pk)\
+                .update(is_active=False)
+        super().save(*args, **kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Trait Rating System
+# ---------------------------------------------------------------------------
+
+
+class TraitCategory(SchoolScopedModel):
+    """
+    A grouping of related behavioural/psychomotor traits for a school.
+
+    Examples: "Affective Traits", "Psychomotor Skills"
+    """
+
+    name = models.CharField(max_length=100)
+    display_order = models.PositiveSmallIntegerField(
+        default=0,
+        db_index=True,
+        help_text="Display order — lower numbers appear first.",
+    )
+
+    class Meta:
+        db_table = "academics_traitcategory"
+        ordering = ["display_order", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["school", "name"],
+                name="uniq_traitcategory_name_per_school",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["school", "display_order"],
+                name="idx_traitcategory_school_order",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class Trait(SchoolScopedModel):
+    """
+    A single measurable behaviour or skill within a TraitCategory.
+
+    Examples: "Punctuality", "Mental Alertness", "Handwriting", "Reading"
+    """
+
+    category = models.ForeignKey(
+        TraitCategory,
+        on_delete=models.CASCADE,
+        related_name="traits",
+    )
+    name = models.CharField(max_length=100)
+    display_order = models.PositiveSmallIntegerField(
+        default=0,
+        db_index=True,
+        help_text="Display order within its category — lower numbers appear first.",
+    )
+
+    class Meta:
+        db_table = "academics_trait"
+        ordering = ["category__display_order", "display_order", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["school", "category", "name"],
+                name="uniq_trait_name_per_category",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["school", "category"],
+                name="idx_trait_school_category",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.category.name} — {self.name}"
+
+
+class TraitScale(SchoolScopedModel):
+    """
+    A rating level that a school defines for trait evaluations.
+
+    Each school configures its own scale, e.g.:
+      Excellent (5), Very Good (4), Good (3), Fair (2), Poor (1)
+    """
+
+    label = models.CharField(max_length=50)
+    numeric_value = models.PositiveSmallIntegerField(
+        help_text="Numeric representation of this rating level.",
+    )
+    display_order = models.PositiveSmallIntegerField(
+        default=0,
+        db_index=True,
+        help_text="Display order — lower numbers appear first.",
+    )
+
+    class Meta:
+        db_table = "academics_traitscale"
+        ordering = ["display_order", "-numeric_value"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["school", "label"],
+                name="uniq_traitscale_label_per_school",
+            ),
+            models.UniqueConstraint(
+                fields=["school", "numeric_value"],
+                name="uniq_traitscale_value_per_school",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["school", "display_order"],
+                name="idx_traitscale_school_order",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.label} ({self.numeric_value})"
+
+
+class StudentTraitRating(SchoolScopedModel):
+    """
+    Records a teacher's rating for a student on a specific trait in a term.
+
+    One row per (school, student, term, trait).
+    """
+
+    student = models.ForeignKey(
+        Student,
+        on_delete=models.CASCADE,
+        related_name="trait_ratings",
+    )
+    term = models.ForeignKey(
+        Term,
+        on_delete=models.PROTECT,
+        related_name="trait_ratings",
+    )
+    trait = models.ForeignKey(
+        Trait,
+        on_delete=models.PROTECT,
+        related_name="ratings",
+    )
+    scale = models.ForeignKey(
+        TraitScale,
+        on_delete=models.PROTECT,
+        related_name="ratings",
+    )
+
+    class Meta:
+        db_table = "academics_studenttraitrating"
+        ordering = ["student__last_name", "term", "trait__display_order"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["school", "student", "term", "trait"],
+                name="uniq_student_trait_rating",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["school", "student", "term"],
+                name="idx_traitrating_student_term",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.student} — {self.trait.name}: {self.scale.label}"

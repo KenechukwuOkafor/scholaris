@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Report Card — {{ report.student_info.name }}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Arial, sans-serif;
+      font-size: 12px;
+      color: #111;
+      padding: 28px 36px;
+    }
+
+    /* ── School header ───────────────────────────────────────────────── */
+    .school-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      border-bottom: 3px double #333;
+      padding-bottom: 12px;
+      margin-bottom: 14px;
+    }
+
+    .school-header img.logo {
+      height: 80px;
+      width: auto;
+      flex-shrink: 0;
+    }
+
+    .school-header .school-text {
+      flex: 1;
+      text-align: center;
+    }
+
+    .school-header .school-text h1 {
+      font-size: 20px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+    }
+
+    .school-header .school-text p {
+      font-size: 11px;
+      color: #555;
+      margin-top: 3px;
+    }
+
+    .report-title {
+      text-align: center;
+      font-size: 14px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 14px;
+      color: #333;
+    }
+
+    /* ── Student meta ────────────────────────────────────────────────── */
+    .student-meta {
+      display: flex;
+      justify-content: space-between;
+      background: #f5f5f5;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 10px 14px;
+      margin-bottom: 14px;
+    }
+
+    .student-meta .col p {
+      margin-bottom: 4px;
+      font-size: 12px;
+    }
+
+    .student-meta .col span {
+      font-weight: bold;
+    }
+
+    /* ── Summary bar ─────────────────────────────────────────────────── */
+    .summary-bar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .summary-item {
+      flex: 1;
+      text-align: center;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 8px 4px;
+      background: #fafafa;
+    }
+
+    .summary-item .label {
+      font-size: 9px;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .summary-item .value {
+      font-size: 17px;
+      font-weight: bold;
+      margin-top: 2px;
+    }
+
+    /* ── Subjects table ──────────────────────────────────────────────── */
+    .section-title {
+      font-size: 12px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #444;
+      border-bottom: 1px solid #bbb;
+      padding-bottom: 3px;
+      margin-bottom: 8px;
+      margin-top: 14px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+      margin-bottom: 4px;
+    }
+
+    thead tr {
+      background: #2c3e50;
+      color: #fff;
+    }
+
+    thead th {
+      padding: 7px 6px;
+      text-align: center;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    thead th.subject-col { text-align: left; }
+
+    tbody tr:nth-child(even) { background: #f9f9f9; }
+
+    tbody td {
+      padding: 6px 6px;
+      text-align: center;
+      border-bottom: 1px solid #eee;
+    }
+
+    tbody td.subject-col { text-align: left; font-weight: 500; }
+
+    .grade-badge {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: 3px;
+      font-weight: bold;
+      font-size: 10px;
+    }
+
+    .grade-A { background: #d4edda; color: #155724; }
+    .grade-B { background: #cce5ff; color: #004085; }
+    .grade-C { background: #fff3cd; color: #856404; }
+    .grade-D { background: #ffe5d0; color: #7d3c00; }
+    .grade-F { background: #f8d7da; color: #721c24; }
+
+    /* ── Traits ──────────────────────────────────────────────────────── */
+    .trait-category { margin-bottom: 10px; }
+
+    .trait-category h4 {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #666;
+      margin-bottom: 5px;
+    }
+
+    .trait-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+
+    .trait-item {
+      flex: 0 0 calc(50% - 3px);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border: 1px solid #ddd;
+      border-radius: 3px;
+      padding: 4px 8px;
+      font-size: 11px;
+      background: #fafafa;
+    }
+
+    .trait-item .trait-rating { font-weight: bold; }
+
+    /* ── Teacher's remark ────────────────────────────────────────────── */
+    .remark-box {
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background: #fdfdf5;
+      padding: 10px 14px;
+      font-size: 12px;
+      font-style: italic;
+      color: #333;
+      margin-bottom: 4px;
+    }
+
+    /* ── Signatures / stamp footer ───────────────────────────────────── */
+    .footer {
+      margin-top: 24px;
+      border-top: 1px solid #ccc;
+      padding-top: 14px;
+    }
+
+    .footer-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+
+    .footer-col {
+      text-align: center;
+      min-width: 140px;
+    }
+
+    .footer-col img {
+      display: block;
+      margin: 0 auto 4px;
+      max-width: 140px;
+    }
+
+    .footer-col img.signature { height: 60px; }
+    .footer-col img.stamp     { height: 80px; }
+
+    .footer-col .line {
+      border-top: 1px solid #333;
+      margin-top: 4px;
+      padding-top: 3px;
+      font-size: 10px;
+      color: #444;
+    }
+
+    .next-term-box {
+      text-align: center;
+      margin-top: 16px;
+      font-size: 11px;
+      color: #444;
+    }
+
+    .next-term-box strong { font-size: 12px; color: #111; }
+  </style>
+</head>
+<body>
+
+  <!-- School header -->
+  <div class="school-header">
+    {% if report.school.logo %}
+      <img class="logo" src="{{ report.school.logo }}" alt="{{ report.school.name }} logo" />
+    {% endif %}
+    <div class="school-text">
+      <h1>{{ report.school.name }}</h1>
+      {% if report.school.address %}<p>{{ report.school.address }}</p>{% endif %}
+      {% if report.school.phone or report.school.email %}
+        <p>
+          {% if report.school.phone %}Tel: {{ report.school.phone }}{% endif %}
+          {% if report.school.phone and report.school.email %} &nbsp;|&nbsp; {% endif %}
+          {% if report.school.email %}Email: {{ report.school.email }}{% endif %}
+        </p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="report-title">Student Report Card</div>
+
+  <!-- Student meta -->
+  <div class="student-meta">
+    <div class="col">
+      <p>Name: <span>{{ report.student_info.name }}</span></p>
+      <p>Class: <span>{{ report.student_info.class }}</span></p>
+    </div>
+    <div class="col" style="text-align: right;">
+      <p>Term: <span>{{ report.student_info.term }}</span></p>
+      <p>Session: <span>{{ report.student_info.session }}</span></p>
+    </div>
+  </div>
+
+  <!-- Summary -->
+  <div class="summary-bar">
+    <div class="summary-item">
+      <div class="label">Total Score</div>
+      <div class="value">{{ report.summary.total_score }}</div>
+    </div>
+    <div class="summary-item">
+      <div class="label">Average</div>
+      <div class="value">{{ report.summary.average_score }}</div>
+    </div>
+    <div class="summary-item">
+      <div class="label">Class Position</div>
+      <div class="value">
+        {% if report.summary.class_position %}
+          {{ report.summary.class_position }}<sup>{% if report.summary.class_position == 1 %}st{% elif report.summary.class_position == 2 %}nd{% elif report.summary.class_position == 3 %}rd{% else %}th{% endif %}</sup>
+          / {{ report.summary.students_in_class }}
+        {% else %}
+          &mdash;
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Academic performance -->
+  <div class="section-title">Academic Performance</div>
+  <table>
+    <thead>
+      <tr>
+        <th class="subject-col">Subject</th>
+        {% with first_subject=report.subjects|first %}
+          {% for name in first_subject.assessments.keys %}
+            <th>{{ name }}</th>
+          {% endfor %}
+        {% endwith %}
+        <th>Total</th>
+        <th>Grade</th>
+        <th>Position</th>
+        <th>Class Avg</th>
+        <th>Highest</th>
+        <th>Lowest</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for subject in report.subjects %}
+      <tr>
+        <td class="subject-col">{{ subject.subject }}</td>
+        {% for name, score in subject.assessments.items %}
+          <td>{{ score }}</td>
+        {% endfor %}
+        <td><strong>{{ subject.total_score }}</strong></td>
+        <td>
+          <span class="grade-badge grade-{{ subject.grade }}">{{ subject.grade }}</span>
+        </td>
+        <td>{% if subject.position %}{{ subject.position }}{% else %}&mdash;{% endif %}</td>
+        <td>{% if subject.class_average %}{{ subject.class_average }}{% else %}&mdash;{% endif %}</td>
+        <td>{% if subject.highest %}{{ subject.highest }}{% else %}&mdash;{% endif %}</td>
+        <td>{% if subject.lowest %}{{ subject.lowest }}{% else %}&mdash;{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <!-- Traits -->
+  {% if report.traits %}
+  <div class="section-title">Behavioural &amp; Psychomotor Ratings</div>
+  {% for category_name, trait_list in report.traits.items %}
+  <div class="trait-category">
+    <h4>{{ category_name }}</h4>
+    <div class="trait-grid">
+      {% for item in trait_list %}
+      <div class="trait-item">
+        <span>{{ item.trait }}</span>
+        <span class="trait-rating">{{ item.rating }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  <!-- Teacher's Remark -->
+  <div class="section-title">Teacher's Remark</div>
+  <div class="remark-box">
+    {{ report.remarks }}
+  </div>
+
+  <!-- Footer: signatures + stamp -->
+  <div class="footer">
+    <div class="footer-row">
+
+      <!-- Principal signature (left) -->
+      <div class="footer-col">
+        {% if report.school.principal_signature %}
+          <img class="signature" src="{{ report.school.principal_signature }}"
+               alt="Principal Signature" />
+        {% else %}
+          <div style="height: 60px;"></div>
+        {% endif %}
+        <div class="line">Principal's Signature</div>
+      </div>
+
+      <!-- Next term begins (centre) -->
+      <div class="footer-col">
+        {% if report.student_info.next_term_begins %}
+        <div class="next-term-box">
+          Next Term Begins<br>
+          <strong>{{ report.student_info.next_term_begins }}</strong>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- School stamp (right) -->
+      <div class="footer-col">
+        {% if report.school.school_stamp %}
+          <img class="stamp" src="{{ report.school.school_stamp }}"
+               alt="School Stamp" />
+        {% else %}
+          <div style="height: 80px; border: 2px dashed #ccc; border-radius: 50%;
+                      width: 80px; margin: 0 auto;"></div>
+        {% endif %}
+        <div class="line">School Stamp</div>
+      </div>
+
+    </div>
+  </div>
+
+</body>
+</html>

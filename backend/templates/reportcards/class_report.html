@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Class Report Cards</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Arial, sans-serif;
+      font-size: 12px;
+      color: #111;
+    }
+
+    /* ── Page break between students ────────────────────────────────── */
+    .page-break {
+      page-break-after: always;
+    }
+
+    .report-card {
+      padding: 24px 32px;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────── */
+    .report-header {
+      text-align: center;
+      margin-bottom: 16px;
+      border-bottom: 2px solid #333;
+      padding-bottom: 10px;
+    }
+
+    .report-header h1 {
+      font-size: 18px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .report-header p {
+      font-size: 12px;
+      color: #555;
+      margin-top: 2px;
+    }
+
+    /* ── Student meta ────────────────────────────────────────────────── */
+    .student-meta {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      background: #f5f5f5;
+      padding: 10px 14px;
+      border-radius: 4px;
+    }
+
+    .student-meta .info-block p {
+      margin-bottom: 3px;
+    }
+
+    .student-meta .info-block span {
+      font-weight: bold;
+    }
+
+    /* ── Summary bar ─────────────────────────────────────────────────── */
+    .summary-bar {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .summary-item {
+      flex: 1;
+      text-align: center;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 8px 4px;
+    }
+
+    .summary-item .label {
+      font-size: 10px;
+      color: #777;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .summary-item .value {
+      font-size: 16px;
+      font-weight: bold;
+      margin-top: 2px;
+    }
+
+    /* ── Subjects table ──────────────────────────────────────────────── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+      font-size: 11px;
+    }
+
+    thead tr {
+      background: #333;
+      color: #fff;
+    }
+
+    thead th {
+      padding: 7px 8px;
+      text-align: center;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    thead th.subject-col {
+      text-align: left;
+    }
+
+    tbody tr:nth-child(even) {
+      background: #fafafa;
+    }
+
+    tbody td {
+      padding: 6px 8px;
+      text-align: center;
+      border-bottom: 1px solid #eee;
+    }
+
+    tbody td.subject-col {
+      text-align: left;
+      font-weight: 500;
+    }
+
+    .grade-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-weight: bold;
+      font-size: 11px;
+    }
+
+    .grade-A { background: #d4edda; color: #155724; }
+    .grade-B { background: #cce5ff; color: #004085; }
+    .grade-C { background: #fff3cd; color: #856404; }
+    .grade-D { background: #ffe5d0; color: #7d3c00; }
+    .grade-F { background: #f8d7da; color: #721c24; }
+
+    /* ── Traits section ──────────────────────────────────────────────── */
+    .traits-section {
+      margin-top: 8px;
+    }
+
+    .traits-section h3 {
+      font-size: 13px;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 4px;
+      margin-bottom: 10px;
+    }
+
+    .trait-category {
+      margin-bottom: 14px;
+    }
+
+    .trait-category h4 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #555;
+      margin-bottom: 6px;
+    }
+
+    .trait-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .trait-item {
+      flex: 0 0 calc(50% - 3px);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border: 1px solid #ddd;
+      border-radius: 3px;
+      padding: 4px 8px;
+      font-size: 11px;
+    }
+
+    .trait-item .trait-name {
+      color: #333;
+    }
+
+    .trait-item .trait-rating {
+      font-weight: bold;
+      color: #444;
+    }
+  </style>
+</head>
+<body>
+
+{% for report in reports %}
+<div class="report-card">
+
+  <!-- Header -->
+  <div class="report-header">
+    <h1>Student Report Card</h1>
+    <p>{{ report.student_info.session }} &mdash; {{ report.student_info.term }}</p>
+  </div>
+
+  <!-- Student meta -->
+  <div class="student-meta">
+    <div class="info-block">
+      <p>Name: <span>{{ report.student_info.name }}</span></p>
+      <p>Class: <span>{{ report.student_info.class }}</span></p>
+    </div>
+    <div class="info-block" style="text-align: right;">
+      <p>Term: <span>{{ report.student_info.term }}</span></p>
+      <p>Session: <span>{{ report.student_info.session }}</span></p>
+    </div>
+  </div>
+
+  <!-- Summary -->
+  <div class="summary-bar">
+    <div class="summary-item">
+      <div class="label">Total Score</div>
+      <div class="value">{{ report.summary.total_score }}</div>
+    </div>
+    <div class="summary-item">
+      <div class="label">Average</div>
+      <div class="value">{{ report.summary.average_score }}</div>
+    </div>
+    <div class="summary-item">
+      <div class="label">Class Position</div>
+      <div class="value">
+        {% if report.summary.class_position %}
+          {{ report.summary.class_position }} / {{ report.summary.students_in_class }}
+        {% else %}
+          &mdash;
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Subjects table -->
+  <table>
+    <thead>
+      <tr>
+        <th class="subject-col">Subject</th>
+        {% with first_subject=report.subjects|first %}
+          {% for assessment_name in first_subject.assessments.keys %}
+            <th>{{ assessment_name }}</th>
+          {% endfor %}
+        {% endwith %}
+        <th>Total</th>
+        <th>Grade</th>
+        <th>Position</th>
+        <th>Class Avg</th>
+        <th>Highest</th>
+        <th>Lowest</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for subject in report.subjects %}
+      <tr>
+        <td class="subject-col">{{ subject.subject }}</td>
+        {% for assessment_name, score in subject.assessments.items %}
+          <td>{{ score }}</td>
+        {% endfor %}
+        <td><strong>{{ subject.total_score }}</strong></td>
+        <td>
+          <span class="grade-badge grade-{{ subject.grade }}">{{ subject.grade }}</span>
+        </td>
+        <td>{% if subject.position %}{{ subject.position }}{% else %}&mdash;{% endif %}</td>
+        <td>{% if subject.class_average %}{{ subject.class_average }}{% else %}&mdash;{% endif %}</td>
+        <td>{% if subject.highest %}{{ subject.highest }}{% else %}&mdash;{% endif %}</td>
+        <td>{% if subject.lowest %}{{ subject.lowest }}{% else %}&mdash;{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <!-- Traits -->
+  {% if report.traits %}
+  <div class="traits-section">
+    <h3>Behavioural &amp; Psychomotor Ratings</h3>
+    {% for category_name, trait_list in report.traits.items %}
+    <div class="trait-category">
+      <h4>{{ category_name }}</h4>
+      <div class="trait-grid">
+        {% for item in trait_list %}
+        <div class="trait-item">
+          <span class="trait-name">{{ item.trait }}</span>
+          <span class="trait-rating">{{ item.rating }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+</div><!-- /.report-card -->
+
+{% if not forloop.last %}
+<div class="page-break"></div>
+{% endif %}
+
+{% endfor %}
+
+</body>
+</html>
