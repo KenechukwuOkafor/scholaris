@@ -1,5 +1,6 @@
 """
-ReportCardPDFService — renders a student's report card to PDF bytes.
+ReportCardPDFService — renders a student's report card to PDF bytes and
+persists the result via ReportCardStorageService.
 
 Template resolution order:
   1. ReportCardTemplate where is_active=True for the student's school
@@ -19,6 +20,7 @@ from weasyprint import HTML
 
 from academics.models import ReportCardTemplate
 from academics.services.reportcard_service import generate_report_card
+from academics.services.reportcard_storage_service import store_report_card
 from core.models import Term
 from enrollment.models import Student
 
@@ -55,13 +57,15 @@ def _render_html(report_data: dict, school) -> str:
 
 def generate_report_card_pdf(student: Student, term: Term) -> bytes:
     """
-    Build a PDF report card for *student* in *term*.
+    Build a PDF report card for *student* in *term*, then persist it.
 
     Steps:
         1. Fetch structured report data via generate_report_card().
         2. Resolve the school's active ReportCardTemplate; fall back to the
            default filesystem template if none is configured.
         3. Render HTML and convert to PDF bytes via WeasyPrint.
+        4. Persist the PDF via store_report_card() — creates or replaces the
+           ReportCardFile row for this (student, term) pair.
 
     Returns:
         Raw PDF bytes.
@@ -69,6 +73,8 @@ def generate_report_card_pdf(student: Student, term: Term) -> bytes:
     Raises:
         rest_framework.exceptions.NotFound — propagated from generate_report_card()
         when no computed results exist for this student/term.
+        rest_framework.exceptions.PermissionDenied — propagated from
+        generate_report_card() when results are not yet published.
         django.template.TemplateSyntaxError — if the stored custom template
         contains invalid Django template syntax.
     """
@@ -76,4 +82,8 @@ def generate_report_card_pdf(student: Student, term: Term) -> bytes:
 
     html = _render_html(data, school=student.school)
 
-    return HTML(string=html).write_pdf()
+    pdf_bytes = HTML(string=html).write_pdf()
+
+    store_report_card(student=student, term=term, pdf_bytes=pdf_bytes)
+
+    return pdf_bytes

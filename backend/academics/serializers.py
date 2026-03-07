@@ -30,3 +30,17 @@ class BroadsheetSubmitSerializer(serializers.Serializer):
                 "Duplicate student_id entries are not allowed in a single submission."
             )
         return entries
+
+
+class ResultReleaseActionSerializer(serializers.Serializer):
+    """Payload for publish / unpublish result actions."""
+
+    class_id = serializers.UUIDField()
+    term_id = serializers.UUIDField()
+
+
+class ReportCardDownloadSerializer(serializers.Serializer):
+    """Query parameters for the report card download endpoint."""
+
+    student_id = serializers.UUIDField()
+    term_id = serializers.UUIDField()

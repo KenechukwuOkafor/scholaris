@@ -280,6 +280,14 @@ class Score(SchoolScopedModel):
                 fields=["school", "subject", "term"],
                 name="idx_score_school_subject_term",
             ),
+            # Compound covering index for the result processor's per-student
+            # per-subject per-term score lookup.  The unique constraint spans 5
+            # columns (+ assessment_type); this 4-column index is narrower and
+            # more cache-friendly for reads that do not filter on assessment_type.
+            models.Index(
+                fields=["school", "student", "subject", "term"],
+                name="idx_score_student_subj_term",
+            ),
         ]
 
     def __str__(self) -> str:
@@ -607,6 +615,124 @@ class StudentSubjectResult(SchoolScopedModel):
 
     def __str__(self) -> str:
         return f"{self.student} — {self.subject} (pos: {self.subject_position})"
+
+
+# ---------------------------------------------------------------------------
+# Report Card File Storage
+# ---------------------------------------------------------------------------
+
+
+class ReportCardFile(SchoolScopedModel):
+    """
+    Stores the most-recently generated PDF report card for a student in a term.
+
+    One row per (student, term) — re-generating overwrites the stored file
+    and refreshes generated_at.
+
+    Inherits from SchoolScopedModel:
+    - id         → UUIDField primary key
+    - school     → ForeignKey(School, on_delete=PROTECT)
+    - created_at → DateTimeField
+    - updated_at → DateTimeField
+    """
+
+    student = models.ForeignKey(
+        "enrollment.Student",
+        on_delete=models.CASCADE,
+        related_name="report_card_files",
+    )
+    term = models.ForeignKey(
+        Term,
+        on_delete=models.PROTECT,
+        related_name="report_card_files",
+    )
+    pdf_file = models.FileField(upload_to="reportcards/")
+    generated_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "academics_reportcardfile"
+        ordering = ["-generated_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["student", "term"],
+                name="uniq_reportcardfile_student_term",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["school", "student", "term"],
+                name="idx_rcfile_school_student_term",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.student} — {self.term} ({self.pdf_file.name})"
+
+
+# ---------------------------------------------------------------------------
+# Result Publishing Control
+# ---------------------------------------------------------------------------
+
+
+class ResultRelease(SchoolScopedModel):
+    """
+    Controls whether computed results for a class+term combination are
+    visible to students and parents.
+
+    Publish/unpublish is an explicit admin action — results are hidden by
+    default until a school administrator publishes them.
+
+    Inherits from SchoolScopedModel:
+    - id         → UUIDField primary key
+    - school     → ForeignKey(School, on_delete=PROTECT)
+    - created_at → DateTimeField
+    - updated_at → DateTimeField
+    """
+
+    school_class = models.ForeignKey(
+        SchoolClass,
+        on_delete=models.PROTECT,
+        related_name="result_releases",
+    )
+    term = models.ForeignKey(
+        Term,
+        on_delete=models.PROTECT,
+        related_name="result_releases",
+    )
+    is_published = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="When True, report cards for this class+term are accessible.",
+    )
+    published_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp of the most recent publish action.",
+    )
+
+    class Meta:
+        db_table = "academics_resultrelease"
+        ordering = ["school_class__name", "term__name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["school_class", "term"],
+                name="uniq_resultrelease_class_term",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["school", "school_class"],
+                name="idx_resultrelease_school_cls",
+            ),
+            models.Index(
+                fields=["school", "term"],
+                name="idx_resultrelease_school_term",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        status = "published" if self.is_published else "unpublished"
+        return f"{self.school_class} — {self.term} ({status})"
 
 
 # ---------------------------------------------------------------------------

@@ -23,4 +23,8 @@ urlpatterns = [
     path("api/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("api/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("api/academics/", include("academics.urls", namespace="academics")),
+    path("api/enrollment/", include("enrollment.urls", namespace="enrollment")),
+    path("api/notifications/", include("notifications.urls", namespace="notifications")),
+    path("api/parent/", include("accounts.urls_parent_portal", namespace="parent_portal")),
+    path("api/analytics/", include("analytics.urls", namespace="analytics")),
 ]

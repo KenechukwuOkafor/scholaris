@@ -23,6 +23,7 @@ from rest_framework.exceptions import NotFound, PermissionDenied, ValidationErro
 from academics.models import AssessmentType, Score, TeachingAssignment
 from accounts.models import Teacher
 from core.models import SchoolClass, Subject, Term
+from core.services.audit_service import ACTION_BROADSHEET_SUBMIT, log_action
 from enrollment.models import Student
 
 
@@ -78,6 +79,24 @@ class BroadsheetService:
             subject=subject,
             term=term,
             assessment_type=assessment_type,
+        )
+
+        log_action(
+            actor=user,
+            action=ACTION_BROADSHEET_SUBMIT,
+            target_model="SchoolClass",
+            target_id=school_class.id,
+            metadata={
+                "class_id": str(class_id),
+                "class_name": school_class.name,
+                "subject_id": str(subject_id),
+                "subject_name": subject.name,
+                "term_id": str(term_id),
+                "term_name": term.name,
+                "assessment_type": assessment_type.name,
+                "students_updated": count,
+            },
+            school=school,
         )
 
         return {"students_updated": count}

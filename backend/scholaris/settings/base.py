@@ -50,6 +50,8 @@ PROJECT_APPS = [
     "finance",
     "governance",
     "audit",
+    "notifications",
+    "analytics",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + PROJECT_APPS
@@ -229,6 +231,25 @@ AWS_S3_VERIFY = True
 AWS_S3_OBJECT_PARAMETERS = {
     "CacheControl": "max-age=86400",
 }
+
+# ---------------------------------------------------------------------------
+# WhatsApp — Meta Cloud API
+# ---------------------------------------------------------------------------
+
+# Phone number ID from the Meta WhatsApp Business dashboard.
+WHATSAPP_PHONE_NUMBER_ID = os.environ.get("WHATSAPP_PHONE_NUMBER_ID", "")
+
+# System user access token with whatsapp_business_messaging permission.
+WHATSAPP_ACCESS_TOKEN = os.environ.get("WHATSAPP_ACCESS_TOKEN", "")
+
+# Meta Graph API version.
+WHATSAPP_API_VERSION = os.environ.get("WHATSAPP_API_VERSION", "v19.0")
+
+# Derived endpoint — callers should use this directly.
+WHATSAPP_API_URL = (
+    f"https://graph.facebook.com/{WHATSAPP_API_VERSION}"
+    f"/{WHATSAPP_PHONE_NUMBER_ID}/messages"
+)
 
 # ---------------------------------------------------------------------------
 # Logging

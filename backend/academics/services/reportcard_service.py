@@ -21,9 +21,10 @@ from decimal import Decimal
 from typing import Any
 
 from django.db.models import Count, OuterRef, Subquery
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, PermissionDenied
 
 from academics.models import (
+    ResultRelease,
     ResultStatistics,
     ResultSummary,
     Score,
@@ -248,22 +249,14 @@ def generate_report_card(
     """
     school = student.school
 
-    # ── Query 1: Per-subject results ──────────────────────────────────────
-    subject_results = list(
-        StudentSubjectResult.objects
-        .for_school(school)
-        .filter(student=student, term=term)
-        .select_related("subject")
-        .order_by("subject__name")
-    )
-
-    if not subject_results:
-        raise NotFound(_NOT_FOUND_MSG)
-
-    # ── Query 2: Overall summary + class size (correlated subquery) ───────
+    # ── Query 1: Overall summary + class size + publish status ────────────
     #
-    # students_in_class counts ResultSummary rows sharing the same
-    # school / class / term — resolved in a single SQL query via Subquery.
+    # Three values resolved in a single SQL query via correlated subqueries:
+    #   • students_in_class — count of ResultSummary rows for the same class/term
+    #   • results_published — is_published from ResultRelease (None → unpublished)
+    #
+    # The publish gate fires immediately after this query so no result data
+    # is returned to the caller when results are not yet published.
     _class_size_sq = (
         ResultSummary.objects
         .filter(
@@ -276,18 +269,50 @@ def generate_report_card(
         .values("cnt")
     )
 
+    _published_sq = (
+        ResultRelease.objects
+        .filter(
+            school_class_id=OuterRef("school_class_id"),
+            term_id=OuterRef("term_id"),
+        )
+        .values("is_published")[:1]
+    )
+
     try:
         summary = (
             ResultSummary.objects
             .for_school(school)
             .select_related("school_class", "term__session")
-            .annotate(students_in_class=Subquery(_class_size_sq))
+            .annotate(
+                students_in_class=Subquery(_class_size_sq),
+                results_published=Subquery(_published_sq),
+            )
             .get(student=student, term=term)
         )
     except ResultSummary.DoesNotExist:
         raise NotFound(_NOT_FOUND_MSG)
 
     school_class = summary.school_class
+
+    # ── Publish gate ──────────────────────────────────────────────────────
+    # results_published is None when no ResultRelease row exists (default
+    # unpublished state) or False when explicitly unpublished.
+    if not summary.results_published:
+        raise PermissionDenied(
+            "Results for this class have not been published."
+        )
+
+    # ── Query 2: Per-subject results ──────────────────────────────────────
+    subject_results = list(
+        StudentSubjectResult.objects
+        .for_school(school)
+        .filter(student=student, term=term)
+        .select_related("subject")
+        .order_by("subject__name")
+    )
+
+    if not subject_results:
+        raise NotFound(_NOT_FOUND_MSG)
 
     # ── Query 3: Class-level statistics keyed by subject_id ───────────────
     stats_by_subject: dict[Any, ResultStatistics] = {

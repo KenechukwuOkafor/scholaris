@@ -5,7 +5,9 @@ from django.forms import Textarea
 
 from .models import (
     AssessmentType,
+    ReportCardFile,
     ReportCardTemplate,
+    ResultRelease,
     ResultStatistics,
     Score,
     StudentTraitRating,
@@ -92,6 +94,24 @@ class ReportCardTemplateAdmin(admin.ModelAdmin):
     formfield_overrides = {
         db_models.TextField: {"widget": Textarea(attrs={"rows": 30, "cols": 120})},
     }
+
+
+@admin.register(ReportCardFile)
+class ReportCardFileAdmin(admin.ModelAdmin):
+    list_display = ("student", "term", "pdf_file", "generated_at", "school")
+    list_filter = ("school", "term")
+    search_fields = ("student__first_name", "student__last_name", "student__registration_number")
+    readonly_fields = ("id", "generated_at", "created_at", "updated_at")
+    ordering = ("-generated_at",)
+
+
+@admin.register(ResultRelease)
+class ResultReleaseAdmin(admin.ModelAdmin):
+    list_display = ("school_class", "term", "is_published", "published_at", "school", "updated_at")
+    list_filter = ("school", "is_published", "term")
+    search_fields = ("school_class__name", "term__name")
+    ordering = ("school_class__name", "term__name")
+    readonly_fields = ("id", "published_at", "created_at", "updated_at")
 
 
 @admin.register(TraitCategory)
