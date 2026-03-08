@@ -165,6 +165,7 @@ class AttendanceRecord(SchoolScopedModel):
         PRESENT = "present", "Present"
         ABSENT  = "absent",  "Absent"
         LATE    = "late",    "Late"
+        EXCUSED = "excused", "Excused"
 
     session = models.ForeignKey(
         AttendanceSession,

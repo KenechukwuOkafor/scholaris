@@ -13,6 +13,16 @@ class AttendanceRecordInputSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=AttendanceRecord.Status.choices)
 
 
+class ClassAttendanceQuerySerializer(serializers.Serializer):
+    class_id = serializers.UUIDField()
+    date = serializers.DateField()
+
+
+class StudentAttendanceQuerySerializer(serializers.Serializer):
+    student_id = serializers.UUIDField()
+    term_id = serializers.UUIDField()
+
+
 class StartSessionSerializer(serializers.Serializer):
     class_id = serializers.UUIDField()
     date = serializers.DateField()
@@ -44,6 +54,18 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = AttendanceRecord
         fields = ["id", "student", "status", "status_display"]
+
+
+class StudentAttendanceRecordSerializer(serializers.ModelSerializer):
+    """Per-record view for a student's attendance history — includes the date."""
+
+    date = serializers.DateField(source="session.date", read_only=True)
+    school_class = serializers.StringRelatedField(source="session.school_class")
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+
+    class Meta:
+        model = AttendanceRecord
+        fields = ["id", "date", "school_class", "status", "status_display"]
 
 
 # ---------------------------------------------------------------------------

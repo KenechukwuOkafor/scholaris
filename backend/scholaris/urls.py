@@ -27,4 +27,5 @@ urlpatterns = [
     path("api/notifications/", include("notifications.urls", namespace="notifications")),
     path("api/parent/", include("accounts.urls_parent_portal", namespace="parent_portal")),
     path("api/analytics/", include("analytics.urls", namespace="analytics")),
+    path("api/attendance/", include("enrollment.attendance_urls", namespace="attendance")),
 ]

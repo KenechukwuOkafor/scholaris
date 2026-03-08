@@ -4,20 +4,29 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.models import SchoolClass
+from core.models import SchoolClass, Term
 from core.tenant import get_request_school
 
 from .models import AttendanceSession, Parent, Student
 from .serializers import (
+    AttendanceRecordSerializer,
     AttendanceSessionSerializer,
+    ClassAttendanceQuerySerializer,
     CreateParentSerializer,
     LinkParentSerializer,
     MarkAttendanceSerializer,
     ParentSerializer,
     StartSessionSerializer,
+    StudentAttendanceQuerySerializer,
+    StudentAttendanceRecordSerializer,
     StudentParentSerializer,
 )
-from .services.attendance_service import mark_attendance, start_attendance_session
+from .services.attendance_service import (
+    get_class_attendance,
+    get_student_attendance,
+    mark_attendance,
+    start_attendance_session,
+)
 from .services.parent_service import create_parent, link_parent
 
 
@@ -114,6 +123,118 @@ class MarkAttendanceView(APIView):
             {
                 "message": "Attendance recorded successfully.",
                 "records_saved": result["records_saved"],
+            }
+        )
+
+
+class ClassAttendanceView(APIView):
+    """
+    GET /api/attendance/class/?class_id=<uuid>&date=YYYY-MM-DD
+
+    Return the attendance session and all student records for a class on a given day.
+
+    Query params:
+        class_id — UUID of the SchoolClass
+        date     — ISO date string (YYYY-MM-DD)
+
+    Response:
+        {
+            "session": { id, school_class, date, marked_by, created_at } | null,
+            "records": [ { id, student, status, status_display }, ... ],
+            "summary": { present, absent, late, excused, total }
+        }
+
+    Returns null session and empty records when no session has been opened yet.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        serializer = ClassAttendanceQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        user_school = get_request_school(request)
+
+        try:
+            school_class = SchoolClass.objects.select_related("school").get(
+                id=data["class_id"]
+            )
+        except SchoolClass.DoesNotExist:
+            raise NotFound(f"Class {data['class_id']} not found.")
+
+        if user_school is not None and user_school != school_class.school:
+            raise PermissionDenied("The requested class does not belong to your school.")
+
+        result = get_class_attendance(school_class=school_class, date=data["date"])
+
+        return Response(
+            {
+                "session": (
+                    AttendanceSessionSerializer(result["session"]).data
+                    if result["session"]
+                    else None
+                ),
+                "records": AttendanceRecordSerializer(result["records"], many=True).data,
+                "summary": result["summary"],
+            }
+        )
+
+
+class StudentAttendanceView(APIView):
+    """
+    GET /api/attendance/student/?student_id=<uuid>&term_id=<uuid>
+
+    Return a per-day attendance log and summary for a student within a term.
+
+    Query params:
+        student_id — UUID of the Student
+        term_id    — UUID of the Term
+
+    Response:
+        {
+            "student": "<str>",
+            "term":    "<str>",
+            "records": [ { id, date, school_class, status, status_display }, ... ],
+            "summary": {
+                days_present, days_absent, days_late, days_excused,
+                total_days, attendance_percentage
+            }
+        }
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        serializer = StudentAttendanceQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        user_school = get_request_school(request)
+
+        try:
+            student = Student.objects.select_related("school").get(id=data["student_id"])
+        except Student.DoesNotExist:
+            raise NotFound(f"Student {data['student_id']} not found.")
+
+        if user_school is not None and user_school != student.school:
+            raise PermissionDenied("This student does not belong to your school.")
+
+        try:
+            term = Term.objects.for_school(student.school).get(id=data["term_id"])
+        except Term.DoesNotExist:
+            raise NotFound(f"Term {data['term_id']} not found.")
+
+        result = get_student_attendance(student=student, term=term)
+
+        return Response(
+            {
+                "student": str(student),
+                "term": str(term),
+                "records": StudentAttendanceRecordSerializer(
+                    result["records"], many=True
+                ).data,
+                "summary": result["summary"],
             }
         )
 

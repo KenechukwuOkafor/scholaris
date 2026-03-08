@@ -107,6 +107,126 @@ def mark_attendance(
     return {"records_saved": len(objects)}
 
 
+def get_class_attendance(
+    school_class: SchoolClass,
+    date: datetime.date,
+) -> dict:
+    """
+    Return the attendance session and all records for *school_class* on *date*.
+
+    Args:
+        school_class: the class whose attendance to retrieve.
+        date:         the day of interest.
+
+    Returns::
+
+        {
+            "session":  AttendanceSession | None,
+            "records":  list[AttendanceRecord],
+            "summary":  {
+                "present": int,
+                "absent":  int,
+                "late":    int,
+                "excused": int,
+                "total":   int,
+            },
+        }
+
+    Returns an empty result dict when no session exists for the given day.
+    """
+    try:
+        session = (
+            AttendanceSession.objects
+            .select_related("school_class", "marked_by")
+            .get(school=school_class.school, school_class=school_class, date=date)
+        )
+    except AttendanceSession.DoesNotExist:
+        return {"session": None, "records": [], "summary": {}}
+
+    records_qs = (
+        AttendanceRecord.objects
+        .filter(session=session)
+        .select_related("student")
+        .order_by("student__last_name", "student__first_name")
+    )
+    records = list(records_qs)
+
+    agg = records_qs.aggregate(
+        present=Count("id", filter=Q(status=AttendanceRecord.Status.PRESENT)),
+        absent=Count("id",  filter=Q(status=AttendanceRecord.Status.ABSENT)),
+        late=Count("id",    filter=Q(status=AttendanceRecord.Status.LATE)),
+        excused=Count("id", filter=Q(status=AttendanceRecord.Status.EXCUSED)),
+    )
+    agg["total"] = agg["present"] + agg["absent"] + agg["late"] + agg["excused"]
+
+    return {"session": session, "records": records, "summary": agg}
+
+
+def get_student_attendance(
+    student: Student,
+    term: Term,
+) -> dict:
+    """
+    Return all attendance records for *student* within *term*, plus a summary.
+
+    Args:
+        student: the student to look up.
+        term:    the term whose date range bounds the lookup.
+
+    Returns::
+
+        {
+            "records": list[AttendanceRecord],   # ordered by date
+            "summary": {
+                "days_present":          int,
+                "days_absent":           int,
+                "days_late":             int,
+                "days_excused":          int,
+                "total_days":            int,
+                "attendance_percentage": float,
+            },
+        }
+
+    Notes:
+        - attendance_percentage counts "late" as attended; "excused" is excluded
+          from both numerator and denominator so it does not penalise the student.
+        - Returns empty records and all-zero summary when no records exist.
+    """
+    records_qs = (
+        AttendanceRecord.objects
+        .filter(
+            school_id=student.school_id,
+            student=student,
+            session__date__gte=term.start_date,
+            session__date__lte=term.end_date,
+        )
+        .select_related("session__school_class")
+        .order_by("session__date")
+    )
+    records = list(records_qs)
+
+    agg = records_qs.aggregate(
+        days_present=Count("id", filter=Q(status=AttendanceRecord.Status.PRESENT)),
+        days_absent=Count("id",  filter=Q(status=AttendanceRecord.Status.ABSENT)),
+        days_late=Count("id",    filter=Q(status=AttendanceRecord.Status.LATE)),
+        days_excused=Count("id", filter=Q(status=AttendanceRecord.Status.EXCUSED)),
+    )
+
+    present = agg["days_present"]
+    absent  = agg["days_absent"]
+    late    = agg["days_late"]
+    excused = agg["days_excused"]
+    # Excused days do not count as absent or present — exclude from denominator.
+    countable = present + absent + late
+
+    agg["total_days"] = present + absent + late + excused
+    agg["attendance_percentage"] = (
+        round((present + late) / countable * 100, 2) if countable else 0.0
+    )
+
+    return {"records": records, "summary": agg}
+
+
 def get_student_attendance_summary(
     student: Student,
     term: Term,
@@ -126,6 +246,7 @@ def get_student_attendance_summary(
             "days_present":          int,
             "days_absent":           int,
             "days_late":             int,
+            "days_excused":          int,
             "total_days":            int,
             "attendance_percentage": float,   # based on present + late
         }
@@ -147,20 +268,24 @@ def get_student_attendance_summary(
             days_present=Count("id", filter=Q(status=AttendanceRecord.Status.PRESENT)),
             days_absent=Count("id",  filter=Q(status=AttendanceRecord.Status.ABSENT)),
             days_late=Count("id",    filter=Q(status=AttendanceRecord.Status.LATE)),
+            days_excused=Count("id", filter=Q(status=AttendanceRecord.Status.EXCUSED)),
         )
     )
 
     present = agg["days_present"]
     absent  = agg["days_absent"]
     late    = agg["days_late"]
-    total   = present + absent + late
+    excused = agg["days_excused"]
+    countable = present + absent + late
+    total   = countable + excused
 
-    attendance_percentage = round((present + late) / total * 100, 2) if total else 0.0
+    attendance_percentage = round((present + late) / countable * 100, 2) if countable else 0.0
 
     return {
-        "days_present": present,
-        "days_absent":  absent,
-        "days_late":    late,
-        "total_days":   total,
+        "days_present":  present,
+        "days_absent":   absent,
+        "days_late":     late,
+        "days_excused":  excused,
+        "total_days":    total,
         "attendance_percentage": attendance_percentage,
     }
